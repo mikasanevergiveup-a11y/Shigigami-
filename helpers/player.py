@@ -4,7 +4,7 @@ from typing import Any, Dict
 from pyrogram import Client
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from helpers.queue import get_queue, clear_queue, set_current
+from helpers.queue import clear_queue, next_track, set_current
 from helpers.streaming import start_stream, stop_stream
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,10 @@ def now_playing_markup(chat_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton("⏸ Pause", callback_data=f"pause_{chat_id}"),
                 InlineKeyboardButton("▶️ Resume", callback_data=f"resume_{chat_id}"),
                 InlineKeyboardButton("⏭ Skip", callback_data=f"skip_{chat_id}"),
+            ],
+            [
+                InlineKeyboardButton("📜 Queue", callback_data=f"queue_{chat_id}"),
+                InlineKeyboardButton("🔂 Loop", callback_data=f"loop_{chat_id}"),
             ],
             [
                 InlineKeyboardButton("🛑 Stop", callback_data=f"stop_{chat_id}"),
@@ -109,6 +113,8 @@ async def mute_playback(chat_id: int) -> bool:
         try:
             if hasattr(_pytgcalls, "mute_stream"):
                 return await _pytgcalls.mute_stream(chat_id)
+            elif hasattr(_pytgcalls, "mute"):
+                return await _pytgcalls.mute(chat_id)
         except Exception as e:
             logger.error(f"Error muting stream in {chat_id}: {e}")
     return False
@@ -120,6 +126,8 @@ async def unmute_playback(chat_id: int) -> bool:
         try:
             if hasattr(_pytgcalls, "unmute_stream"):
                 return await _pytgcalls.unmute_stream(chat_id)
+            elif hasattr(_pytgcalls, "unmute"):
+                return await _pytgcalls.unmute(chat_id)
         except Exception as e:
             logger.error(f"Error unmuting stream in {chat_id}: {e}")
     return False
@@ -143,16 +151,19 @@ async def stop_playback(chat_id: int) -> None:
 
 
 async def play_next(chat_id: int):
-    """Play the next track in queue or stop if empty."""
-    q_data = get_queue(chat_id)
-
-    if isinstance(q_data, list) and len(q_data) > 0:
-        next_track = q_data.pop(0)
-        await play_track(chat_id, next_track)
-        return next_track
-    else:
+    """Play the next queued track, or leave the call when the queue is empty."""
+    track = next_track(chat_id)
+    if track is None:
         await stop_playback(chat_id)
         return None
+
+    try:
+        await play_track(chat_id, track)
+        return track
+    except Exception:
+        # Do not leave a stale current-track marker when playback fails.
+        set_current(chat_id, None)
+        raise
 
 
 async def play_track(chat_id: int, track: dict) -> None:
