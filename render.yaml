@@ -1,0 +1,21 @@
+# Render Blueprint — deploy as a Background Worker
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: worker
+    name: telegram-music-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: API_ID
+        sync: false          # set via Render dashboard / API; never committed
+      - key: API_HASH
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: STRING_SESSION
+        sync: false
+    autoDeploy: true         # redeploy automatically on every GitHub push
+    plan: free
+    region: oregon
+    healthCheckPath: null    # background worker — no HTTP health check
