@@ -4,7 +4,7 @@ TgCrypto==1.2.5
 
 py-tgcalls==2.3.3
 
-yt-dlp==2024.4.9
+yt-dlp==2026.7.4
 
 aiohttp==3.9.5
 
