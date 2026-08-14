@@ -1,5 +1,5 @@
-import logging
 import asyncio
+import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
@@ -13,7 +13,7 @@ from helpers.player import (
     stop_playback, 
     play_next
 )
-from helpers.queue import add_to_queue, get_queue, clear_queue
+from helpers.queue import add_to_queue, get_queue, get_current, clear_queue
 
 logger = logging.getLogger(__name__)
 
@@ -121,8 +121,17 @@ def register_music(app: Client, user_client=None):
         m = await message.reply_text("🔍 သီချင်း ရှာဖွေနေပါသည်...")
 
         try:
-            track = extract_stream_info(query)
+            # yt-dlp is synchronous; keep it off Pyrogram's event loop.
+            track = await asyncio.wait_for(
+                asyncio.to_thread(extract_stream_info, query),
+                timeout=45,
+            )
             track["requested_by"] = message.from_user.mention if message.from_user else "User"
+        except asyncio.TimeoutError:
+            return await m.edit_text(
+                "⏳ သီချင်းရှာဖွေမှု ကြာနေပါသည်။ YouTube verification ဖြစ်နေနိုင်သဖြင့် "
+                "direct YouTube link ဖြင့် ထပ်စမ်းပါ။"
+            )
         except Exception as err:
             return await m.edit_text(f"❌ Error: {err}")
 
@@ -134,10 +143,13 @@ def register_music(app: Client, user_client=None):
         thumb = track.get("thumbnail") or START_IMAGE_URL
 
         q = get_queue(chat_id)
-        if q and len(q) > 0:
-            add_to_queue(chat_id, track)
+        # Queue when a track is currently playing; the old code only checked
+        # whether the waiting queue already had an item, so the second track
+        # incorrectly replaced/started instead of being queued.
+        if get_current(chat_id) is not None or q:
+            position = add_to_queue(chat_id, track)
             await m.edit_text(
-                f"🎵 **Queue ထဲသို့ ထည့်လိုက်ပါပြီ!**\n\n"
+                f"🎵 **Queue ထဲသို့ ထည့်လိုက်ပါပြီ!** (#{position})\n\n"
                 f"📌 **ခေါင်းစဉ်:** [{track['title']}]({track.get('url', track.get('webpage_url', ''))})\n"
                 f"⏱ **ကြာမြင့်ချိန်:** `{duration_str}`"
             )

@@ -1,26 +1,43 @@
 import logging
-from helpers.player import set_refs
+
+from handlers.callbacks import register_callbacks
+from handlers.help import register_help
 from handlers.music import register_music
+from handlers.start import register_start
+from helpers.player import play_next, set_refs
+from helpers.queue import get_current
 
 logger = logging.getLogger(__name__)
 
 
 def register_all_handlers(bot_client, pytgcalls):
-    """
-    Main Bot Client ထဲသို့ Handlers အားလုံးကို Register ပြုလုပ်ပေးပြီး
-    PyTgCalls reference ကို helpers/player.py သို့ ပို့ဆောင်ပေးသည်။
-    """
-    # ၁။ PyTgCalls instance ကို helpers/player.py ထဲသို့ ချိတ်ဆက်ပေးခြင်း
-    try:
-        set_refs(bot_client, pytgcalls)
-        logger.info("✅ PyTgCalls reference attached to player helper.")
-    except Exception as e:
-        logger.error(f"❌ Failed to attach PyTgCalls reference: {e}")
+    """Register bot commands, inline callbacks, and PyTgCalls lifecycle hooks."""
+    set_refs(bot_client, pytgcalls)
+    # Register specific playback callbacks before music.py's generic menu callback.
+    register_callbacks(bot_client)
+    register_start(bot_client)
+    register_help(bot_client)
+    register_music(bot_client)
 
-    # ၂။ Music Handlers များကို Bot Client ထဲသို့ Register ပြုလုပ်ခြင်း
+    # PyTgCalls 2.x emits StreamEnded updates when an audio/video source ends.
+    # Advancing here makes the queue work without requiring /skip.
     try:
-        register_music(bot_client)
-        logger.info("✅ Music handlers successfully registered.")
-    except Exception as e:
-        logger.error(f"❌ Failed to register music handlers: {e}")
-        
+        from pytgcalls.types import StreamEnded
+
+        @pytgcalls.on_update()
+        async def _stream_update(update):
+            if not isinstance(update, StreamEnded):
+                return
+            chat_id = update.chat_id
+            if get_current(chat_id) is None:
+                return
+            try:
+                await play_next(chat_id)
+            except Exception:
+                logger.exception("Automatic queue advance failed for chat %s", chat_id)
+
+        logger.info("✅ PyTgCalls StreamEnded auto-next handler registered.")
+    except Exception:
+        logger.exception("❌ Could not register PyTgCalls StreamEnded handler.")
+
+    logger.info("✅ Music commands and inline callbacks registered.")
