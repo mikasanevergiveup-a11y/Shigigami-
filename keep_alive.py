@@ -15,9 +15,10 @@ app = Flask(__name__)
 PORT = int(os.environ.get("PORT", "5050"))
 
 @app.route('/')
+@app.route('/healthz')
 @app.route('/<path:path>')
 def home(path=""):
-    return "🤖 Bot Self-Ping System is Active!", 200
+    return "Bot Self-Ping System is Active!", 200
 
 def self_ping_loop():
     time.sleep(5)  # Web Server တက်လာအောင် ၅ စက္ကန့် ခဏစောင့်မည်
@@ -32,7 +33,7 @@ def self_ping_loop():
 
 def run_flask():
     try:
-        app.run(host='0.0.0.0', port=PORT)
+        app.run(host="0.0.0.0", port=PORT, threaded=True, use_reloader=False)
     except Exception as e:
         print(f"⚠️ [Flask Server Error]: {e}")
 
