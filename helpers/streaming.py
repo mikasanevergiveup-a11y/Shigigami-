@@ -150,9 +150,7 @@ def _format_duration(seconds: int) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
 
 
-def _extract_video(video_url: str, extra_opts: dict | None = None) -> dict:
-    with YoutubeDL(_yt_opts(extra_opts)) as ytdl:
-        info = ytdl.extract_info(video_url, download=False)
+def _stream_result(info: dict, source_url: str) -> dict:
     if not info:
         raise RuntimeError("yt-dlp returned no video information")
     stream_url = info.get("url")
@@ -162,9 +160,15 @@ def _extract_video(video_url: str, extra_opts: dict | None = None) -> dict:
         "title": info.get("title", "Unknown Title"),
         "duration": _format_duration(_duration(info)),
         "stream_url": stream_url,
-        "url": info.get("webpage_url") or video_url,
+        "url": info.get("webpage_url") or source_url,
         "thumbnail": info.get("thumbnail") or "https://telegra.ph/file/f02e6503b22c7104e6c38.jpg",
     }
+
+
+def _extract_video(video_url: str, extra_opts: dict | None = None) -> dict:
+    with YoutubeDL(_yt_opts(extra_opts)) as ytdl:
+        info = ytdl.extract_info(video_url, download=False)
+    return _stream_result(info, video_url)
 
 
 def _search_youtube_candidates(query: str) -> list[str]:
@@ -216,20 +220,24 @@ def extract_stream_info(url_or_query: str) -> dict:
                     logger.warning("YouTube candidate failed %r: %s", candidate, exc)
 
         # YouTube search may be blocked while SoundCloud is still available.
-        targets = [f"scsearch5:{query}"]
+        # SoundCloud search already resolves an audio URL for each entry; reuse
+        # that URL instead of requesting the same track a second time.
+        targets = (f"scsearch10:{query}", f"scsearch10:{query} song")
         for target in targets:
             try:
                 with YoutubeDL(_yt_opts()) as ytdl:
                     info = ytdl.extract_info(target, download=False)
                 entries = [entry for entry in (info.get("entries") or []) if entry]
                 for entry in entries:
-                    candidate = entry.get("webpage_url") or entry.get("url")
-                    if candidate:
-                        try:
+                    try:
+                        if entry.get("url"):
+                            return _stream_result(entry, entry.get("webpage_url") or entry.get("url"))
+                        candidate = entry.get("webpage_url")
+                        if candidate:
                             return _extract_video(candidate)
-                        except Exception as exc:
-                            last_exception = exc
-                            logger.warning("SoundCloud candidate failed %r: %s", candidate, exc)
+                    except Exception as exc:
+                        last_exception = exc
+                        logger.warning("SoundCloud candidate failed %r: %s", entry.get("webpage_url"), exc)
             except Exception as exc:
                 last_exception = exc
                 logger.warning("SoundCloud search failed for %r: %s", query, exc)
