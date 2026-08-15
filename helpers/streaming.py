@@ -36,6 +36,16 @@ YOUTUBE_FALLBACK_CLIENTS = (
 )
 
 SHORT_MARKERS = ("#shorts", "#short", "youtube shorts")
+MUSIC_MARKERS = (
+    "official audio", "official music video", "music video", "lyric video",
+    "lyrics", "audio", "song", "music", "cover", "remix", "acoustic",
+    "karaoke", "ost", "soundtrack", "live performance", "mv",
+)
+NON_MUSIC_MARKERS = (
+    "podcast", "reaction", "review", "tutorial", "interview", "news",
+    "documentary", "gameplay", "walkthrough", "vlog", "trailer", "teaser",
+    "short film", "episode", "sermon", "motivation", "speech", "lecture",
+)
 MIN_PREFERRED_DURATION = 45
 _COOKIE_FILE: str | None = None
 
@@ -110,11 +120,26 @@ def _candidate_url(entry: dict) -> str | None:
     return None
 
 
+def _music_score(entry: dict) -> int:
+    """Rank likely song/audio results for /play above ordinary video content."""
+    title = str(entry.get("title") or "").lower()
+    score = 0
+    score += sum(4 for marker in MUSIC_MARKERS if marker in title)
+    score -= sum(6 for marker in NON_MUSIC_MARKERS if marker in title)
+    if _duration(entry) >= MIN_PREFERRED_DURATION:
+        score += 2
+    return score
+
+
 def _ordered_candidates(entries: list[dict]) -> list[str]:
     valid = [entry for entry in entries if entry and not _is_short(entry) and _candidate_url(entry)]
-    preferred = [entry for entry in valid if _duration(entry) >= MIN_PREFERRED_DURATION]
-    ordered = preferred + [entry for entry in valid if entry not in preferred]
-    return [_candidate_url(entry) for entry in ordered if _candidate_url(entry)]
+    # Keep a candidate when its title is ambiguous, but rank clear music/audio
+    # results first and push obvious non-music videos to the end.
+    ranked = sorted(
+        enumerate(valid),
+        key=lambda item: (-_music_score(item[1]), -_duration(item[1]), item[0]),
+    )
+    return [_candidate_url(entry) for _, entry in ranked if _candidate_url(entry)]
 
 
 def _format_duration(seconds: int) -> str:
