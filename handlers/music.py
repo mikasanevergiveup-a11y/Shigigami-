@@ -30,6 +30,7 @@ MUSIC_HELP_TEXT = """✨ **MUSIC BOT — အသုံးပြုနိုင်
 ━━━━━━━━━━━━━━━━━━━━━━
 • `/start` — Bot ကို စတင်ရန်
 • `/help` — ဒီ command list ကို ကြည့်ရန်
+• `/health` သို့မဟုတ် `/healthz` — Bot running နှင့် self-ping status စစ်ရန်
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 **Member Commands**

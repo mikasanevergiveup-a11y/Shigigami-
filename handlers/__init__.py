@@ -2,6 +2,7 @@ import logging
 
 from handlers.callbacks import register_callbacks
 from handlers.help import register_help
+from handlers.health import register_health
 from handlers.music import register_music
 from handlers.start import register_start
 from helpers.player import play_next, set_refs
@@ -17,6 +18,7 @@ def register_all_handlers(bot_client, pytgcalls):
     register_callbacks(bot_client)
     register_start(bot_client)
     register_help(bot_client)
+    register_health(bot_client)
     register_music(bot_client)
 
     # PyTgCalls 2.x emits StreamEnded updates when an audio/video source ends.
