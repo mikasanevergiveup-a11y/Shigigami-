@@ -29,10 +29,8 @@ HELP_TEXT = """✨ **MUSIC BOT — အသုံးပြုနိုင်သေ
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 **Member / Music**
 ━━━━━━━━━━━━━━━━━━━━━━
-• `/play <သီချင်းအမည် သို့မဟုတ် link>` — Voice Chat တွင် သီချင်းဖွင့်ရန်
-  ဥပမာ: `/play သီချင်းအမည်`
-• `/vplay <ဗီဒီယိုအမည် သို့မဟုတ် link>` — Video stream ဖွင့်ရန်
-  ဥပမာ: `/vplay https://youtu.be/...`
+• `/play <သီချင်းအမည် သို့မဟုတ် SoundCloud link>` — SoundCloud မှ Voice Chat တွင် သီချင်းဖွင့်ရန်
+  ဥပမာ: `/play မြန်မာသီချင်းအမည်`
 • `/queue` သို့မဟုတ် `/list` — လက်ရှိ queue ကို ကြည့်ရန်
   ဥပမာ: `/queue`
 
@@ -73,6 +71,7 @@ HELP_TEXT = """✨ **MUSIC BOT — အသုံးပြုနိုင်သေ
   ဥပမာ: `/stop`
 
 💡 Moderation commands များကို Group Admin များသာ အသုံးပြုနိုင်ပါသည်။
+💡 `/play` သည် SoundCloud ကိုသာ အသုံးပြုပါသည်။
 💡 `/all` သည် bot restart ပြီးနောက် bot သိရှိထားသော member များကိုသာ mention လုပ်နိုင်ပါသည်။
 
 ⚡️ Powered by @Mount_lvy"""

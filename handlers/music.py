@@ -46,8 +46,8 @@ MUSIC_HELP_TEXT = """✨ **MUSIC BOT — အသုံးပြုနိုင်
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 **Member Commands**
 ━━━━━━━━━━━━━━━━━━━━━━
-• `/play <သီချင်းအမည် သို့မဟုတ် link>` — Voice Chat တွင် သီချင်းဖွင့်ရန်
-• `/vplay <ဗီဒီယိုအမည် သို့မဟုတ် link>` — Voice Chat တွင် video stream ဖွင့်ရန်
+• `/play <သီချင်းအမည် သို့မဟုတ် SoundCloud link>` — SoundCloud မှ Voice Chat တွင် သီချင်းဖွင့်ရန်
+  ဥပမာ: `/play မြန်မာသီချင်းအမည်` သို့မဟုတ် SoundCloud track link
 • `/queue` သို့မဟုတ် `/list` — လက်ရှိ queue ကို ကြည့်ရန်
 
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -83,6 +83,8 @@ MUSIC_HELP_TEXT = """✨ **MUSIC BOT — အသုံးပြုနိုင်
   ဥပမာ: `/stop`
 
 💡 `/all` သည် bot restart ပြီးနောက် bot သိရှိထားသော member များကိုသာ mention လုပ်နိုင်ပါသည်။
+
+💡 `/play` သည် SoundCloud ကိုသာ အသုံးပြုပါသည်။
 
 💡 Command များကို Group Voice Chat ထဲတွင် အသုံးပြုပါ။
 
@@ -157,13 +159,13 @@ def register_music(app: Client, user_client=None):
         )
 
     # ── 4. PLAY COMMAND ───────────────────────────────────────────────────────
-    @app.on_message(filters.command(["play", "vplay"]) & filters.group)
+    @app.on_message(filters.command(["play"]) & filters.group)
     async def play_cmd(client: Client, message: Message):
         chat_id = message.chat.id
         SERVED_CHATS.add(chat_id)
 
         if len(message.command) < 2 and not message.reply_to_message:
-            return await message.reply_text("💡 အသုံးပြုပုံ: `/play <သီချင်းအမည်>`")
+            return await message.reply_text("💡 အသုံးပြုပုံ: `/play <SoundCloud သီချင်းအမည်>`")
 
         if message.reply_to_message and message.reply_to_message.text:
             query = message.reply_to_message.text
@@ -173,7 +175,7 @@ def register_music(app: Client, user_client=None):
         m = await message.reply_text("🔍 သီချင်း ရှာဖွေနေပါသည်...")
 
         try:
-            # yt-dlp is synchronous; keep it off Pyrogram's event loop.
+            # SoundCloud extraction is synchronous; keep it off Pyrogram's event loop.
             track = await asyncio.wait_for(
                 asyncio.to_thread(extract_stream_info, query),
                 timeout=45,
@@ -181,8 +183,7 @@ def register_music(app: Client, user_client=None):
             track["requested_by"] = message.from_user.mention if message.from_user else "User"
         except asyncio.TimeoutError:
             return await m.edit_text(
-                "⏳ သီချင်းရှာဖွေမှု ကြာနေပါသည်။ YouTube verification ဖြစ်နေနိုင်သဖြင့် "
-                "direct YouTube link ဖြင့် ထပ်စမ်းပါ။"
+                "⏳ SoundCloud ရှာဖွေမှု ကြာနေပါသည်။ ခဏစောင့်ပြီး သီချင်းအမည်ကို တိုတိုဖြင့် ထပ်စမ်းပါ။"
             )
         except Exception as err:
             return await m.edit_text(f"❌ Error: {err}")
