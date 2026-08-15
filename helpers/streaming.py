@@ -1,10 +1,6 @@
-"""YouTube/SoundCloud stream extraction with resilient search fallbacks."""
+"""SoundCloud-only audio search and stream extraction."""
 
-import base64
 import logging
-import os
-import tempfile
-import unicodedata
 from urllib.parse import urlparse
 
 from yt_dlp import YoutubeDL
@@ -15,131 +11,46 @@ BASE_YTDL_OPTS = {
     "format": "bestaudio[acodec!=none]/bestaudio/best",
     "noplaylist": True,
     "nocheckcertificate": True,
-    "ignoreerrors": False,
+    "ignoreerrors": True,
     "quiet": True,
     "no_warnings": True,
-    "default_search": "ytsearch",
-    "source_address": "0.0.0.0",
-    "geo_bypass": True,
     "retries": 2,
     "fragment_retries": 2,
-    "socket_timeout": 20,
-    "js_runtimes": {"node": {}},
+    "socket_timeout": 25,
+    "source_address": "0.0.0.0",
 }
 
-# Do not force Android/iOS clients. Those clients can require client-bound
-# PO tokens and may return LOGIN_REQUIRED for a public video.
-YOUTUBE_FALLBACK_CLIENTS = (
-    {},
-    {"youtube": {"player_client": ["web_embedded"]}},
-    {"youtube": {"player_client": ["tv"]}},
-)
-
-SHORT_MARKERS = ("#shorts", "#short", "youtube shorts")
 MUSIC_MARKERS = (
-    "official audio", "official music video", "music video", "lyric video",
-    "lyrics", "audio", "song", "music", "cover", "remix", "acoustic",
-    "karaoke", "ost", "soundtrack", "live performance", "mv",
+    "official audio", "music video", "lyric video", "lyrics", "audio",
+    "song", "music", "cover", "remix", "acoustic", "karaoke", "ost",
+    "soundtrack", "live performance", "မြန်မာသီချင်း", "သီချင်း",
 )
 NON_MUSIC_MARKERS = (
     "podcast", "reaction", "review", "tutorial", "interview", "news",
     "documentary", "gameplay", "walkthrough", "vlog", "trailer", "teaser",
     "short film", "episode", "sermon", "motivation", "speech", "lecture",
 )
-MIN_PREFERRED_DURATION = 45
-_COOKIE_FILE: str | None = None
+
+SOUNDCLOUD_HOSTS = {"soundcloud.com", "www.soundcloud.com", "on.soundcloud.com"}
 
 
 def _normalise_query(value: str) -> str:
-    return unicodedata.normalize("NFC", " ".join(value.strip().split()))
+    return " ".join(value.strip().split())
 
 
-def _cookie_file_from_env() -> str | None:
-    """Materialize an optional base64 Netscape cookie file without committing it."""
-    global _COOKIE_FILE
-    encoded = os.getenv("YOUTUBE_COOKIES_B64", "").strip()
-    if not encoded:
-        return None
-    if _COOKIE_FILE and os.path.exists(_COOKIE_FILE):
-        return _COOKIE_FILE
+def _is_soundcloud_url(value: str) -> bool:
     try:
-        data = base64.b64decode(encoded, validate=True)
-        if not data.startswith(b"# Netscape HTTP Cookie File"):
-            raise ValueError("not a Netscape cookie file")
-        fd, path = tempfile.mkstemp(prefix="youtube-", suffix=".cookies")
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(data)
-        os.chmod(path, 0o600)
-        _COOKIE_FILE = path
-        return path
-    except Exception as exc:
-        logger.warning("Ignoring invalid YOUTUBE_COOKIES_B64: %s", exc)
-        return None
-
-
-def _yt_opts(extra_extractor_args: dict | None = None, *, flat_search: bool = False) -> dict:
-    opts = dict(BASE_YTDL_OPTS)
-    cookie_file = _cookie_file_from_env()
-    if cookie_file:
-        opts["cookiefile"] = cookie_file
-    if flat_search:
-        # Search metadata must be collected without extracting the first video.
-        # This lets us skip one blocked/unavailable result and try the next one.
-        opts.pop("format", None)
-        opts["extract_flat"] = "in_playlist"
-        opts["ignoreerrors"] = True
-    if extra_extractor_args:
-        opts["extractor_args"] = extra_extractor_args
-    return opts
-
-
-def _is_short(info: dict) -> bool:
-    page_url = str(info.get("webpage_url") or info.get("original_url") or info.get("url") or "").lower()
-    title = str(info.get("title") or "").lower()
-    path = urlparse(page_url).path.lower()
-    return "/shorts/" in path or any(marker in title for marker in SHORT_MARKERS)
+        host = (urlparse(value).hostname or "").lower()
+        return host in SOUNDCLOUD_HOSTS or host.endswith(".soundcloud.com")
+    except Exception:
+        return False
 
 
 def _duration(info: dict) -> int:
     try:
-        return int(info.get("duration") or 0)
+        return int(float(info.get("duration") or 0))
     except (TypeError, ValueError):
         return 0
-
-
-def _candidate_url(entry: dict) -> str | None:
-    value = entry.get("webpage_url") or entry.get("original_url") or entry.get("url")
-    if not value:
-        video_id = entry.get("id")
-        if video_id:
-            value = f"https://www.youtube.com/watch?v={video_id}"
-    if not isinstance(value, str):
-        return None
-    if value.startswith("https://www.youtube.com/watch?") or value.startswith("https://youtu.be/"):
-        return value
-    return None
-
-
-def _music_score(entry: dict) -> int:
-    """Rank likely song/audio results for /play above ordinary video content."""
-    title = str(entry.get("title") or "").lower()
-    score = 0
-    score += sum(4 for marker in MUSIC_MARKERS if marker in title)
-    score -= sum(6 for marker in NON_MUSIC_MARKERS if marker in title)
-    if _duration(entry) >= MIN_PREFERRED_DURATION:
-        score += 2
-    return score
-
-
-def _ordered_candidates(entries: list[dict]) -> list[str]:
-    valid = [entry for entry in entries if entry and not _is_short(entry) and _candidate_url(entry)]
-    # Keep a candidate when its title is ambiguous, but rank clear music/audio
-    # results first and push obvious non-music videos to the end.
-    ranked = sorted(
-        enumerate(valid),
-        key=lambda item: (-_music_score(item[1]), -_duration(item[1]), item[0]),
-    )
-    return [_candidate_url(entry) for _, entry in ranked if _candidate_url(entry)]
 
 
 def _format_duration(seconds: int) -> str:
@@ -150,114 +61,74 @@ def _format_duration(seconds: int) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
 
 
+def _music_score(entry: dict) -> int:
+    title = str(entry.get("title") or "").lower()
+    score = sum(4 for marker in MUSIC_MARKERS if marker in title)
+    score -= sum(6 for marker in NON_MUSIC_MARKERS if marker in title)
+    if _duration(entry) >= 45:
+        score += 2
+    return score
+
+
 def _stream_result(info: dict, source_url: str) -> dict:
     if not info:
-        raise RuntimeError("yt-dlp returned no video information")
+        raise RuntimeError("SoundCloud က track information မပြန်ပေးပါ")
     stream_url = info.get("url")
     if not stream_url:
-        raise RuntimeError("No playable audio stream URL was returned")
+        raise RuntimeError("ဒီ SoundCloud track ကို playable audio မရပါ")
     return {
         "title": info.get("title", "Unknown Title"),
         "duration": _format_duration(_duration(info)),
         "stream_url": stream_url,
         "url": info.get("webpage_url") or source_url,
         "thumbnail": info.get("thumbnail") or "https://telegra.ph/file/f02e6503b22c7104e6c38.jpg",
+        "source": "SoundCloud",
     }
 
 
-def _extract_video(video_url: str, extra_opts: dict | None = None) -> dict:
-    with YoutubeDL(_yt_opts(extra_opts)) as ytdl:
-        info = ytdl.extract_info(video_url, download=False)
-    return _stream_result(info, video_url)
+def _extract_soundcloud_url(track_url: str) -> dict:
+    if not _is_soundcloud_url(track_url):
+        raise ValueError("SoundCloud link သာ အသုံးပြုနိုင်ပါသည်")
+    with YoutubeDL(dict(BASE_YTDL_OPTS, ignoreerrors=False)) as ytdl:
+        info = ytdl.extract_info(track_url, download=False)
+    return _stream_result(info, track_url)
 
 
-def _search_youtube_candidates(query: str) -> list[str]:
-    targets = (f"ytsearch10:{query} -shorts", f"ytsearch10:{query}")
-    candidates: list[str] = []
-    for target in targets:
+def _search_soundcloud(query: str) -> dict:
+    last_error: Exception | None = None
+    for target in (f"scsearch10:{query}", f"scsearch10:{query} song"):
         try:
-            with YoutubeDL(_yt_opts(flat_search=True)) as ytdl:
+            with YoutubeDL(BASE_YTDL_OPTS) as ytdl:
                 info = ytdl.extract_info(target, download=False)
-            entries = [entry for entry in (info.get("entries") or []) if entry]
-            for candidate in _ordered_candidates(entries):
-                if candidate not in candidates:
-                    candidates.append(candidate)
+            entries = [entry for entry in (info.get("entries") or []) if entry and entry.get("url")]
+            ranked = sorted(
+                enumerate(entries),
+                key=lambda item: (-_music_score(item[1]), -_duration(item[1]), item[0]),
+            )
+            for _, entry in ranked:
+                try:
+                    return _stream_result(entry, entry.get("webpage_url") or entry.get("url"))
+                except Exception as exc:
+                    last_error = exc
+                    logger.warning("SoundCloud entry unavailable: %s", exc)
         except Exception as exc:
-            logger.warning("YouTube metadata search failed for %r: %s", target, exc)
-    return candidates
-
-
-def _is_direct_youtube_short(value: str) -> bool:
-    parsed = urlparse(value)
-    return "youtube.com" in parsed.netloc.lower() and "/shorts/" in parsed.path.lower()
-
-
-def _is_verification_error(error_text: str) -> bool:
-    lowered = error_text.lower()
-    return any(token in lowered for token in ("sign in to confirm", "not a bot", "captcha", "po token", "http error 403", "login_required"))
+            last_error = exc
+            logger.warning("SoundCloud search failed for %r: %s", query, exc)
+    if last_error:
+        raise RuntimeError(f"SoundCloud မှ playable သီချင်း မတွေ့ပါ ({last_error})") from last_error
+    raise RuntimeError("SoundCloud မှ playable သီချင်း မတွေ့ပါ")
 
 
 def extract_stream_info(url_or_query: str) -> dict:
-    """Return a playable non-Short audio stream for a URL or search query."""
+    """Return a SoundCloud audio stream for a track URL or search query."""
     query = _normalise_query(url_or_query)
     if not query:
-        raise ValueError("Search query is empty")
-
-    if _is_direct_youtube_short(query):
-        raise ValueError("YouTube Shorts link များကို music playback အတွက် မဖွင့်ပါ။ သီချင်းအပြည့်အစုံ link/query ဖြင့် ထပ်စမ်းပါ။")
-
-    if query.startswith("http://") or query.startswith("https://"):
-        targets = [query]
-    else:
-        youtube_candidates = _search_youtube_candidates(query)
-        last_exception: Exception | None = None
-        for candidate in youtube_candidates:
-            for extra_opts in YOUTUBE_FALLBACK_CLIENTS:
-                try:
-                    return _extract_video(candidate, extra_opts)
-                except Exception as exc:
-                    last_exception = exc
-                    logger.warning("YouTube candidate failed %r: %s", candidate, exc)
-
-        # YouTube search may be blocked while SoundCloud is still available.
-        # SoundCloud search already resolves an audio URL for each entry; reuse
-        # that URL instead of requesting the same track a second time.
-        targets = (f"scsearch10:{query}", f"scsearch10:{query} song")
-        for target in targets:
-            try:
-                with YoutubeDL(_yt_opts()) as ytdl:
-                    info = ytdl.extract_info(target, download=False)
-                entries = [entry for entry in (info.get("entries") or []) if entry]
-                for entry in entries:
-                    try:
-                        if entry.get("url"):
-                            return _stream_result(entry, entry.get("webpage_url") or entry.get("url"))
-                        candidate = entry.get("webpage_url")
-                        if candidate:
-                            return _extract_video(candidate)
-                    except Exception as exc:
-                        last_exception = exc
-                        logger.warning("SoundCloud candidate failed %r: %s", entry.get("webpage_url"), exc)
-            except Exception as exc:
-                last_exception = exc
-                logger.warning("SoundCloud search failed for %r: %s", query, exc)
-
-        error_text = str(last_exception) if last_exception else "no playable result"
-        if _is_verification_error(error_text):
-            raise RuntimeError(
-                "YouTube က ဒီ server request ကို verification လုပ်ခိုင်းနေပါသည်။ "
-                "နောက်ထပ် သီချင်းအမည်/artist ဖြင့် ထပ်စမ်းပါ သို့မဟုတ် YouTube link အပြည့်အစုံ ပို့ပါ။"
-            ) from last_exception
-        raise RuntimeError(f"သီချင်း ရှာမတွေ့ပါခင်ဗျာ။ ({error_text})") from last_exception
-
-    last_exception: Exception | None = None
-    for extra_opts in YOUTUBE_FALLBACK_CLIENTS:
-        try:
-            return _extract_video(query, extra_opts)
-        except Exception as exc:
-            last_exception = exc
-            logger.warning("Direct stream extraction failed %r: %s", query, exc)
-    raise RuntimeError("ဒီ link ကို ဖွင့်မရပါ။ ပုံမှန် YouTube video link သို့မဟုတ် သီချင်းအမည်ဖြင့် ထပ်စမ်းပါ။") from last_exception
+        raise ValueError("သီချင်းအမည် မထည့်ရသေးပါ")
+    if query.startswith(("http://", "https://")):
+        if not _is_soundcloud_url(query):
+            raise ValueError("SoundCloud link သာ အသုံးပြုနိုင်ပါသည်။ SoundCloud သီချင်းအမည်ဖြင့်လည်း ရှာနိုင်ပါသည်။")
+        return _extract_soundcloud_url(query)
+    return _search_soundcloud(query)
 
 
 def get_stream_url(url_or_query: str) -> str:
@@ -268,7 +139,7 @@ def start_stream(chat_id: int, url_or_query: str) -> str:
     try:
         return get_stream_url(url_or_query)
     except Exception as exc:
-        logger.error("Extract Stream Info Error for chat %s: %s", chat_id, exc)
+        logger.error("SoundCloud stream error for chat %s: %s", chat_id, exc)
         raise
 
 
