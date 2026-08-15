@@ -171,7 +171,11 @@ async def play_track(chat_id: int, track: dict) -> None:
     if not _pytgcalls:
         raise Exception("PyTgCalls is not initialized! (set_refs was not called)")
 
-    fifo_path = start_stream(chat_id, track["stream_url"])
+    # Search extraction already returns a short-lived direct media URL. Reusing
+    # it avoids a second YouTube request (which can trigger verification) and
+    # prevents yt-dlp from reinterpreting a GoogleVideo URL as a new search.
+    stream_url = track.get("stream_url")
+    fifo_path = stream_url or start_stream(chat_id, track.get("url", ""))
 
     # Wait 1s for FFmpeg buffer
     await asyncio.sleep(1)
