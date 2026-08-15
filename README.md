@@ -98,6 +98,8 @@ docker run -d \
 | `API_HASH` | Telegram app hash |
 | `BOT_TOKEN` | Bot token from @BotFather |
 | `STRING_SESSION` | Pyrogram `StringSession` for the user account |
+| `SPOTIFY_CLIENT_ID` | Optional Spotify catalog app client ID |
+| `SPOTIFY_CLIENT_SECRET` | Optional Spotify catalog app client secret; keep it private |
 
 > **Security:** Never commit `.env` files or session strings to a public repo.
 
@@ -108,10 +110,12 @@ docker run -d \
 ### Member Commands
 | Command | Description |
 |---------|-------------|
-| `/play <song>` | Search SoundCloud and play audio in group VC |
+| `/play <song>` | Search Spotify catalog metadata when configured, then play matching SoundCloud audio in group VC |
 | `/queue` | View upcoming songs |
 | `/song <name>` | Download SoundCloud audio file |
 | `/ping` | Check bot response speed |
+
+> Spotify catalog search is optional. Without the two Spotify environment variables, `/play` continues to search SoundCloud directly. Spotify provides metadata only; playback remains SoundCloud audio.
 
 ### Admin Commands
 | Command | Description |

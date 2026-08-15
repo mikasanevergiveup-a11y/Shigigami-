@@ -6,6 +6,10 @@ API_HASH        = os.environ.get("API_HASH", "")
 BOT_TOKEN       = os.environ.get("BOT_TOKEN", "")
 STRING_SESSION  = os.environ.get("STRING_SESSION", "")
 
+# Optional Spotify catalog search credentials; never hard-code these values.
+SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "")
+SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+
 # ── Force-join channel ────────────────────────────────────────────────────────
 FORCE_JOIN_CHANNEL  = "musicbotmegaliana"          # username without @
 FORCE_JOIN_LINK     = "https://t.me/musicbotmegaliana"
