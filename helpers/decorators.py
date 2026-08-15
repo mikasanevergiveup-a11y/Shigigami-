@@ -65,24 +65,34 @@ def admin_only(func):
     """
     @functools.wraps(func)
     async def wrapper(client: Client, message: Message, *args, **kwargs):
-        if message.chat.type.value == "private":
+        if not message.chat or message.chat.type.value == "private":
             return await func(client, message, *args, **kwargs)
 
         user_id = message.from_user.id if message.from_user else None
         if user_id is None:
+            await message.reply_text(
+                "🥺 ဒီ command ကို သုံးဖို့ admin account နဲ့ ပြန်ပို့ပေးပါရှင်။",
+                quote=True,
+            )
             return
 
         try:
             member = await client.get_chat_member(message.chat.id, user_id)
-            if member.status.value not in ("administrator", "creator"):
+            status = str(getattr(getattr(member, "status", ""), "value", member.status)).lower()
+            if status not in ("administrator", "creator"):
                 await message.reply_text(
-                    "🚫 **Admin Only!**\n"
-                    "This command can only be used by group admins.",
+                    "🚫 **Admin only ပါရှင်**\n"
+                    "ဒီ command ကို Group Admin များသာ သုံးနိုင်ပါတယ်နော် ✨",
                     quote=True,
                 )
                 return
         except Exception as exc:
-            logger.warning("admin_only check failed: %s", exc)
+            logger.exception("admin_only permission check failed: %s", exc)
+            await message.reply_text(
+                "⚠️ Admin permission စစ်မရသေးပါရှင်။ Bot ကို Group Admin လုပ်ပေးပြီး ထပ်စမ်းပေးနော်။",
+                quote=True,
+            )
+            return
 
         return await func(client, message, *args, **kwargs)
 

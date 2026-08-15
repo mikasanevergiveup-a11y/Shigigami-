@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 
 from yt_dlp import YoutubeDL
 
+from helpers.spotify import search_tracks, track_from_url
+
 logger = logging.getLogger(__name__)
 
 BASE_YTDL_OPTS = {
@@ -94,9 +96,21 @@ def _extract_soundcloud_url(track_url: str) -> dict:
     return _stream_result(info, track_url)
 
 
-def _search_soundcloud(query: str) -> dict:
+def _search_soundcloud(query: str, spotify_tracks: list[dict] | None = None) -> dict:
     last_error: Exception | None = None
-    for target in (f"scsearch10:{query}", f"scsearch10:{query} song"):
+    search_queries = [query]
+    for track in spotify_tracks or []:
+        artists = ", ".join(track.get("artists") or [])
+        name = track.get("name") or ""
+        candidate = _normalise_query(f"{artists} {name}")
+        if candidate and candidate not in search_queries:
+            search_queries.append(candidate)
+
+    targets = []
+    for search_query in search_queries:
+        targets.extend((f"scsearch10:{search_query}", f"scsearch10:{search_query} song"))
+
+    for target in targets:
         try:
             with YoutubeDL(BASE_YTDL_OPTS) as ytdl:
                 info = ytdl.extract_info(target, download=False)
@@ -119,16 +133,47 @@ def _search_soundcloud(query: str) -> dict:
     raise RuntimeError("SoundCloud မှ playable သီချင်း မတွေ့ပါ")
 
 
+def _apply_spotify_metadata(result: dict, spotify_track: dict | None) -> dict:
+    if not spotify_track:
+        return result
+    artists = ", ".join(spotify_track.get("artists") or [])
+    result["title"] = f"{artists} — {spotify_track.get('name', result.get('title', 'Unknown'))}"
+    result["thumbnail"] = spotify_track.get("thumbnail") or result.get("thumbnail")
+    result["spotify_url"] = spotify_track.get("spotify_url", "")
+    result["search_source"] = "Spotify metadata + SoundCloud audio"
+    if spotify_track.get("duration"):
+        result["spotify_duration"] = spotify_track["duration"]
+    return result
+
+
 def extract_stream_info(url_or_query: str) -> dict:
-    """Return a SoundCloud audio stream for a track URL or search query."""
+    """Return SoundCloud audio, optionally selected using Spotify track metadata."""
     query = _normalise_query(url_or_query)
     if not query:
         raise ValueError("သီချင်းအမည် မထည့်ရသေးပါ")
+
     if query.startswith(("http://", "https://")):
-        if not _is_soundcloud_url(query):
-            raise ValueError("SoundCloud link သာ အသုံးပြုနိုင်ပါသည်။ SoundCloud သီချင်းအမည်ဖြင့်လည်း ရှာနိုင်ပါသည်။")
-        return _extract_soundcloud_url(query)
-    return _search_soundcloud(query)
+        if _is_soundcloud_url(query):
+            return _extract_soundcloud_url(query)
+        spotify_track = track_from_url(query)
+        if spotify_track:
+            artist_text = ", ".join(spotify_track.get("artists") or [])
+            soundcloud_query = _normalise_query(f"{artist_text} {spotify_track.get('name', '')}")
+            return _apply_spotify_metadata(
+                _search_soundcloud(soundcloud_query, [spotify_track]),
+                spotify_track,
+            )
+        raise ValueError("SoundCloud link သို့မဟုတ် Spotify track link သာ အသုံးပြုနိုင်ပါသည်ရှင်")
+
+    spotify_tracks = search_tracks(query, limit=5)
+    spotify_query = query
+    if spotify_tracks:
+        first = spotify_tracks[0]
+        spotify_query = _normalise_query(
+            f"{', '.join(first.get('artists') or [])} {first.get('name', '')}"
+        )
+    result = _search_soundcloud(spotify_query, spotify_tracks)
+    return _apply_spotify_metadata(result, spotify_tracks[0] if spotify_tracks else None)
 
 
 def get_stream_url(url_or_query: str) -> str:
