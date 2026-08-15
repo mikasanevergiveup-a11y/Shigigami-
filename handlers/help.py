@@ -71,7 +71,8 @@ HELP_TEXT = """✨ **MUSIC BOT — အသုံးပြုနိုင်သေ
   ဥပမာ: `/stop`
 
 💡 Moderation commands များကို Group Admin များသာ အသုံးပြုနိုင်ပါသည်။
-💡 `/play` သည် SoundCloud ကိုသာ အသုံးပြုပါသည်။
+💡 `/play` သည် Spotify-like catalog search (optional) ဖြင့် ရှာပြီး SoundCloud audio ကိုသာ ဖွင့်ပါသည်။
+  Spotify search အတွက် Render Environment တွင် `SPOTIFY_CLIENT_ID` နှင့် `SPOTIFY_CLIENT_SECRET` ထည့်ထားရပါမယ်ရှင်။
 💡 `/all` သည် bot restart ပြီးနောက် bot သိရှိထားသော member များကိုသာ mention လုပ်နိုင်ပါသည်။
 
 ⚡️ Powered by @Mount_lvy"""

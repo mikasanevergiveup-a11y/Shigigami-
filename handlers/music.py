@@ -84,7 +84,8 @@ MUSIC_HELP_TEXT = """✨ **MUSIC BOT — အသုံးပြုနိုင်
 
 💡 `/all` သည် bot restart ပြီးနောက် bot သိရှိထားသော member များကိုသာ mention လုပ်နိုင်ပါသည်။
 
-💡 `/play` သည် SoundCloud ကိုသာ အသုံးပြုပါသည်။
+💡 `/play` သည် Spotify-like catalog search (optional) ဖြင့် ရှာပြီး SoundCloud audio ကိုသာ ဖွင့်ပါသည်။
+  Spotify search အတွက် Render Environment တွင် `SPOTIFY_CLIENT_ID` နှင့် `SPOTIFY_CLIENT_SECRET` ထည့်ထားရပါမယ်ရှင်။
 
 💡 Command များကို Group Voice Chat ထဲတွင် အသုံးပြုပါ။
 
@@ -211,10 +212,14 @@ def register_music(app: Client, user_client=None):
                 await play_track(chat_id, track)
                 await m.delete()
 
+                source_note = track.get("search_source", "SoundCloud audio")
+                spotify_link = track.get("spotify_url", "")
+                spotify_line = f"\n🔎 **Catalog:** [Spotify]({spotify_link})" if spotify_link else ""
                 caption = (
                     f"🎵 **Started Streaming** | ❝\n\n"
                     f"📌 **Title :** `{track['title']}`\n"
                     f"⏱ **Duration :** `{duration_str}` Minutes\n"
+                    f"🎧 **Audio Source :** `{source_note}`{spotify_line}\n"
                     f"👤 **Requested By :** {track['requested_by']}"
                 )
 
