@@ -23,6 +23,37 @@ OWNER_USERNAME = "Mount_lvy"
 # Start Banner Image URL
 START_IMAGE_URL = "https://telegra.ph/file/f02e6503b22c7104e6c38.jpg"
 
+MUSIC_HELP_TEXT = """✨ **MUSIC BOT — အသုံးပြုနိုင်သော Commands** ✨
+
+━━━━━━━━━━━━━━━━━━━━━━
+📌 **အထွေထွေ Commands**
+━━━━━━━━━━━━━━━━━━━━━━
+• `/start` — Bot ကို စတင်ရန်
+• `/help` — ဒီ command list ကို ကြည့်ရန်
+
+━━━━━━━━━━━━━━━━━━━━━━
+👥 **Member Commands**
+━━━━━━━━━━━━━━━━━━━━━━
+• `/play <သီချင်းအမည် သို့မဟုတ် link>` — Voice Chat တွင် သီချင်းဖွင့်ရန်
+• `/vplay <ဗီဒီယိုအမည် သို့မဟုတ် link>` — Voice Chat တွင် video stream ဖွင့်ရန်
+• `/queue` သို့မဟုတ် `/list` — လက်ရှိ queue ကို ကြည့်ရန်
+
+━━━━━━━━━━━━━━━━━━━━━━
+🔐 **Playback/Admin Commands**
+━━━━━━━━━━━━━━━━━━━━━━
+• `/pause` — လက်ရှိ playback ကို ခဏရပ်ရန်
+• `/resume` — ရပ်ထားသော playback ကို ပြန်ဖွင့်ရန်
+• `/skip` သို့မဟုတ် `/next` — နောက်သီချင်းသို့ ကျော်ရန်
+• `/stop` သို့မဟုတ် `/end` — Playback ရပ်ပြီး Voice Chat မှ ထွက်ရန်
+• `/clearqueue` သို့မဟုတ် `/cq` — Queue ထဲရှိ သီချင်းများကို ရှင်းရန်
+• `/volume <1-200>` သို့မဟုတ် `/vol <1-200>` — အသံအတိုးအကျယ် ပြောင်းရန်
+• `/mute` — အသံပိတ်ရန်
+• `/unmute` — အသံပြန်ဖွင့်ရန်
+
+💡 Command များကို Group Voice Chat ထဲတွင် အသုံးပြုပါ။
+
+⚡️ Powered by @Mount_lvy"""
+
 # Broadcast ပို့ရန် Chat စာရင်းများကို မှတ်ထားရန်
 SERVED_CHATS = set()
 
@@ -76,20 +107,7 @@ def register_music(app: Client, user_client=None):
     async def help_cmd(client: Client, message: Message):
         SERVED_CHATS.add(message.chat.id)
         
-        text = (
-            f"✨ **MUSIC BOT COMMANDS MENU** ✨\n\n"
-            f"👥 **Member Commands (အဖွဲ့ဝင်အားလုံး အသုံးပြုနိုင်သည်):**\n"
-            f"• `/play <သီချင်းအမည်>` - Play song in voice chat\n"
-            f"• `/vplay <ဗီဒီယိုအမည်>` - Play video in voice chat\n"
-            f"• `/queue` - Show current queued music list\n\n"
-            f"👑 **Admin Only Commands (Admin များသာ အသုံးပြုနိုင်သည်):**\n"
-            f"• `/pause` - Pause playback\n"
-            f"• `/resume` - Resume playback\n"
-            f"• `/skip` - Skip to next track\n"
-            f"• `/stop` - Stop music & leave VC\n"
-            f"• `/clearqueue` - Clear all queued tracks\n\n"
-            
-        )
+        text = MUSIC_HELP_TEXT
         
         buttons = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="main_menu")]])
         await message.reply_text(text=text, reply_markup=buttons)
@@ -278,20 +296,7 @@ def register_music(app: Client, user_client=None):
         data = query.data
 
         if data == "help_menu":
-            text = (
-                f"✨ **MUSIC BOT COMMANDS MENU** ✨\n\n"
-                f"👥 **Member Commands (အဖွဲ့ဝင်အားလုံး အသုံးပြုနိုင်သည်):**\n"
-                f"• `/play <သီချင်းအမည်>` - Play song in voice chat\n"
-                f"• `/vplay <ဗီဒီယိုအမည်>` - Play video in voice chat\n"
-                f"• `/queue` - Show current queued music list\n\n"
-                f"👑 **Admin Only Commands (Admin များသာ အသုံးပြုနိုင်သည်):**\n"
-                f"• `/pause` - Pause playback\n"
-                f"• `/resume` - Resume playback\n"
-                f"• `/skip` - Skip to next track\n"
-                f"• `/stop` - Stop music & leave VC\n"
-                f"• `/clearqueue` - Clear all queued tracks\n\n"
-                
-            )
+            text = MUSIC_HELP_TEXT
             buttons = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="main_menu")]])
             await query.message.edit_text(text=text, reply_markup=buttons)
 
