@@ -3,7 +3,7 @@
 A fully featured Telegram Voice Chat Music Bot built with:
 - **Pyrogram** — Telegram MTProto client
 - **PyTgCalls** — Voice call streaming
-- **yt-dlp** — YouTube audio/video downloading
+- **yt-dlp** — SoundCloud audio extraction
 - **FFmpeg** — Audio/video processing
 
 ---
@@ -12,8 +12,8 @@ A fully featured Telegram Voice Chat Music Bot built with:
 
 | Feature | Description |
 |---------|-------------|
-| 🎵 Audio streaming | Play YouTube music in group voice chats |
-| 🎬 Video streaming | Stream video to Telegram video chats |
+| 🎵 Audio streaming | Play SoundCloud music in group voice chats |
+| 🎧 SoundCloud fallback | Search multiple SoundCloud results and skip DRM/unplayable tracks |
 | 📋 Smart queue | Per-group song queue with auto-advance |
 | 🔂 Loop mode | Loop the current track |
 | 🔊 Volume control | Adjust volume 1–200% |
@@ -34,18 +34,18 @@ telegram-music-bot/
 │   ├── __init__.py      # Handler registration
 │   ├── start.py         # /start — welcome message
 │   ├── help.py          # /help — command list
-│   ├── music.py         # /play /vplay /song /queue /ping
+│   ├── music.py         # /play /queue /ping
 │   ├── admin.py         # /pause /resume /skip /end /stop /volume /auth /unauth
 │   └── callbacks.py     # Inline button callbacks
 ├── helpers/
 │   ├── __init__.py
 │   ├── queue.py         # Per-chat queue management
-│   ├── downloader.py    # yt-dlp wrapper
+│   ├── downloader.py    # SoundCloud audio downloader
 │   ├── player.py        # PyTgCalls helpers & now-playing UI
 │   └── decorators.py    # @force_join and @admin_only decorators
 ├── assets/
 │   └── banner.jpg       # (optional) Welcome banner image
-├── downloads/           # Auto-created; holds temporary audio/video files
+├── downloads/           # Auto-created; holds temporary audio files
 ├── requirements.txt
 ├── Dockerfile
 ├── render.yaml          # Render Blueprint
@@ -108,10 +108,9 @@ docker run -d \
 ### Member Commands
 | Command | Description |
 |---------|-------------|
-| `/play <song>` | Play music in group VC |
-| `/vplay <video>` | Play video stream in VC |
+| `/play <song>` | Search SoundCloud and play audio in group VC |
 | `/queue` | View upcoming songs |
-| `/song <name>` | Download audio file |
+| `/song <name>` | Download SoundCloud audio file |
 | `/ping` | Check bot response speed |
 
 ### Admin Commands

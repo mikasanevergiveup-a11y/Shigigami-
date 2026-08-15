@@ -23,7 +23,7 @@ LABEL maintainer="@Mount_lvy"
 
 WORKDIR /app
 
-# ── FFmpeg (required by yt-dlp and PyTgCalls) ─────────────────────────────────
+# ── FFmpeg (required by SoundCloud audio streaming and PyTgCalls) ─────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
     && rm -rf /var/lib/apt/lists/*
