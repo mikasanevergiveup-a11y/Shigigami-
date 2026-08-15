@@ -26,11 +26,22 @@ START_IMAGE_URL = "https://telegra.ph/file/f02e6503b22c7104e6c38.jpg"
 MUSIC_HELP_TEXT = """✨ **MUSIC BOT — အသုံးပြုနိုင်သော Commands** ✨
 
 ━━━━━━━━━━━━━━━━━━━━━━
-📌 **အထွေထွေ Commands**
+🆔 **Information**
 ━━━━━━━━━━━━━━━━━━━━━━
-• `/start` — Bot ကို စတင်ရန်
-• `/help` — ဒီ command list ကို ကြည့်ရန်
-• `/health` သို့မဟုတ် `/healthz` — Bot running နှင့် self-ping status စစ်ရန်
+• `/id` — မိမိ User ID နှင့် Group/Chat ID ကြည့်ရန်
+  ဥပမာ: `/id` သို့မဟုတ် user message ကို reply လုပ်ပြီး `/id`
+• `/ping` — Bot online ဖြစ်/မဖြစ် စစ်ရန်
+  ဥပမာ: `/ping`
+• `/health` သို့မဟုတ် `/healthz` — Bot uptime နှင့် self-ping status စစ်ရန်
+  ဥပမာ: `/healthz`
+
+━━━━━━━━━━━━━━━━━━━━━━
+⚙️ **General**
+━━━━━━━━━━━━━━━━━━━━━━
+• `/start` — Bot ၏ welcome message ကို ပြရန်
+  ဥပမာ: `/start`
+• `/help` — ဒီ command menu ကို ပြရန်
+  ဥပမာ: `/help`
 
 ━━━━━━━━━━━━━━━━━━━━━━
 👥 **Member Commands**
@@ -48,8 +59,30 @@ MUSIC_HELP_TEXT = """✨ **MUSIC BOT — အသုံးပြုနိုင်
 • `/stop` သို့မဟုတ် `/end` — Playback ရပ်ပြီး Voice Chat မှ ထွက်ရန်
 • `/clearqueue` သို့မဟုတ် `/cq` — Queue ထဲရှိ သီချင်းများကို ရှင်းရန်
 • `/volume <1-200>` သို့မဟုတ် `/vol <1-200>` — အသံအတိုးအကျယ် ပြောင်းရန်
-• `/mute` — အသံပိတ်ရန်
-• `/unmute` — အသံပြန်ဖွင့်ရန်
+• `/mute` — အသံပိတ်ရန် (သို့မဟုတ် `/mute @username` ဖြင့် member mute)
+• `/unmute` — အသံပြန်ဖွင့်ရန် (သို့မဟုတ် `/unmute @username` ဖြင့် member unmute)
+
+━━━━━━━━━━━━━━━━━━━━━━
+🛡️ **Moderation (Group Admin Only)**
+━━━━━━━━━━━━━━━━━━━━━━
+• `/ban username` — Member ကို ban လုပ်ရန်
+  ဥပမာ: `/ban @username` သို့မဟုတ် user message ကို reply လုပ်ပြီး `/ban`
+• `/unban username` — Ban ထားသော member ကို ပြန်ခွင့်ပြုရန်
+  ဥပမာ: `/unban @username`
+• `/warn username` — Member ကို warning ပေးရန်
+  ဥပမာ: `/warn @username`
+• `/resetwarn username` — Warning များ reset လုပ်ရန်
+  ဥပမာ: `/resetwarn @username`
+• `/mute username` — Member ကို group chat တွင် mute လုပ်ရန်
+  ဥပမာ: `/mute @username`
+• `/unmute username` — Member ကို ပြန်လည် စာပို့ခွင့်ပြုရန်
+  ဥပမာ: `/unmute @username`
+• `/all <message>` — သိမ်းထားသော member များကို mention လုပ်ရန်
+  ဥပမာ: `/all good night guys`
+• `/stop` — `/all` mention broadcast ကို ချက်ချင်းရပ်ရန်
+  ဥပမာ: `/stop`
+
+💡 `/all` သည် bot restart ပြီးနောက် bot သိရှိထားသော member များကိုသာ mention လုပ်နိုင်ပါသည်။
 
 💡 Command များကို Group Voice Chat ထဲတွင် အသုံးပြုပါ။
 
