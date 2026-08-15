@@ -1,6 +1,9 @@
-"""YouTube/SoundCloud stream extraction with search filtering and fallbacks."""
+"""YouTube/SoundCloud stream extraction with resilient search fallbacks."""
 
+import base64
 import logging
+import os
+import tempfile
 import unicodedata
 from urllib.parse import urlparse
 
@@ -8,9 +11,6 @@ from yt_dlp import YoutubeDL
 
 logger = logging.getLogger(__name__)
 
-# Do not force Android/iOS clients here. YouTube increasingly requires
-# client-specific PO tokens for those clients; yt-dlp's default client
-# selection is safer and can choose clients that do not require a token.
 BASE_YTDL_OPTS = {
     "format": "bestaudio[acodec!=none]/bestaudio/best",
     "noplaylist": True,
@@ -24,29 +24,67 @@ BASE_YTDL_OPTS = {
     "retries": 2,
     "fragment_retries": 2,
     "socket_timeout": 20,
-    # Node is installed in the Render image and enables yt-dlp's modern
-    # YouTube JavaScript challenge support when yt-dlp-ejs is available.
     "js_runtimes": {"node": {}},
 }
 
-# These are fallback-only clients. The default yt-dlp client selection is
-# attempted first. web_embedded avoids some guest-account restrictions;
-# tv is another no-cookie fallback for public videos.
+# Do not force Android/iOS clients. Those clients can require client-bound
+# PO tokens and may return LOGIN_REQUIRED for a public video.
 YOUTUBE_FALLBACK_CLIENTS = (
+    {},
     {"youtube": {"player_client": ["web_embedded"]}},
     {"youtube": {"player_client": ["tv"]}},
 )
 
 SHORT_MARKERS = ("#shorts", "#short", "youtube shorts")
 MIN_PREFERRED_DURATION = 45
+_COOKIE_FILE: str | None = None
 
 
 def _normalise_query(value: str) -> str:
     return unicodedata.normalize("NFC", " ".join(value.strip().split()))
 
 
+def _cookie_file_from_env() -> str | None:
+    """Materialize an optional base64 Netscape cookie file without committing it."""
+    global _COOKIE_FILE
+    encoded = os.getenv("YOUTUBE_COOKIES_B64", "").strip()
+    if not encoded:
+        return None
+    if _COOKIE_FILE and os.path.exists(_COOKIE_FILE):
+        return _COOKIE_FILE
+    try:
+        data = base64.b64decode(encoded, validate=True)
+        if not data.startswith(b"# Netscape HTTP Cookie File"):
+            raise ValueError("not a Netscape cookie file")
+        fd, path = tempfile.mkstemp(prefix="youtube-", suffix=".cookies")
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        os.chmod(path, 0o600)
+        _COOKIE_FILE = path
+        return path
+    except Exception as exc:
+        logger.warning("Ignoring invalid YOUTUBE_COOKIES_B64: %s", exc)
+        return None
+
+
+def _yt_opts(extra_extractor_args: dict | None = None, *, flat_search: bool = False) -> dict:
+    opts = dict(BASE_YTDL_OPTS)
+    cookie_file = _cookie_file_from_env()
+    if cookie_file:
+        opts["cookiefile"] = cookie_file
+    if flat_search:
+        # Search metadata must be collected without extracting the first video.
+        # This lets us skip one blocked/unavailable result and try the next one.
+        opts.pop("format", None)
+        opts["extract_flat"] = "in_playlist"
+        opts["ignoreerrors"] = True
+    if extra_extractor_args:
+        opts["extractor_args"] = extra_extractor_args
+    return opts
+
+
 def _is_short(info: dict) -> bool:
-    page_url = str(info.get("webpage_url") or info.get("original_url") or "").lower()
+    page_url = str(info.get("webpage_url") or info.get("original_url") or info.get("url") or "").lower()
     title = str(info.get("title") or "").lower()
     path = urlparse(page_url).path.lower()
     return "/shorts/" in path or any(marker in title for marker in SHORT_MARKERS)
@@ -59,16 +97,24 @@ def _duration(info: dict) -> int:
         return 0
 
 
-def _pick_music_result(entries: list[dict]) -> dict | None:
-    candidates = [entry for entry in entries if entry and not _is_short(entry)]
-    if not candidates:
+def _candidate_url(entry: dict) -> str | None:
+    value = entry.get("webpage_url") or entry.get("original_url") or entry.get("url")
+    if not value:
+        video_id = entry.get("id")
+        if video_id:
+            value = f"https://www.youtube.com/watch?v={video_id}"
+    if not isinstance(value, str):
         return None
+    if value.startswith("https://www.youtube.com/watch?") or value.startswith("https://youtu.be/"):
+        return value
+    return None
 
-    # Prefer ordinary song-length results. If all remaining results are
-    # short/unknown duration, retain the first non-Short result rather than
-    # failing an otherwise valid Burmese search.
-    preferred = [entry for entry in candidates if _duration(entry) >= MIN_PREFERRED_DURATION]
-    return preferred[0] if preferred else candidates[0]
+
+def _ordered_candidates(entries: list[dict]) -> list[str]:
+    valid = [entry for entry in entries if entry and not _is_short(entry) and _candidate_url(entry)]
+    preferred = [entry for entry in valid if _duration(entry) >= MIN_PREFERRED_DURATION]
+    ordered = preferred + [entry for entry in valid if entry not in preferred]
+    return [_candidate_url(entry) for entry in ordered if _candidate_url(entry)]
 
 
 def _format_duration(seconds: int) -> str:
@@ -79,40 +125,47 @@ def _format_duration(seconds: int) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
 
 
-def _extract_target(target: str, extra_opts: dict) -> dict:
-    opts = {**BASE_YTDL_OPTS}
-    if extra_opts:
-        opts["extractor_args"] = extra_opts
+def _extract_video(video_url: str, extra_opts: dict | None = None) -> dict:
+    with YoutubeDL(_yt_opts(extra_opts)) as ytdl:
+        info = ytdl.extract_info(video_url, download=False)
+    if not info:
+        raise RuntimeError("yt-dlp returned no video information")
+    stream_url = info.get("url")
+    if not stream_url:
+        raise RuntimeError("No playable audio stream URL was returned")
+    return {
+        "title": info.get("title", "Unknown Title"),
+        "duration": _format_duration(_duration(info)),
+        "stream_url": stream_url,
+        "url": info.get("webpage_url") or video_url,
+        "thumbnail": info.get("thumbnail") or "https://telegra.ph/file/f02e6503b22c7104e6c38.jpg",
+    }
 
-    with YoutubeDL(opts) as ytdl:
-        info = ytdl.extract_info(target, download=False)
-        if not info:
-            raise RuntimeError("yt-dlp returned no result")
 
-        entries = info.get("entries") if isinstance(info, dict) else None
-        if entries is not None:
-            result = _pick_music_result([entry for entry in entries if entry])
-            if not result:
-                raise RuntimeError("YouTube search returned only Shorts or no playable result")
-            info = result
-
-        stream_url = info.get("url")
-        if not stream_url:
-            raise RuntimeError("No playable audio stream URL was returned")
-
-        duration = _duration(info)
-        return {
-            "title": info.get("title", "Unknown Title"),
-            "duration": _format_duration(duration),
-            "stream_url": stream_url,
-            "url": info.get("webpage_url") or target,
-            "thumbnail": info.get("thumbnail") or "https://telegra.ph/file/f02e6503b22c7104e6c38.jpg",
-        }
+def _search_youtube_candidates(query: str) -> list[str]:
+    targets = (f"ytsearch10:{query} -shorts", f"ytsearch10:{query}")
+    candidates: list[str] = []
+    for target in targets:
+        try:
+            with YoutubeDL(_yt_opts(flat_search=True)) as ytdl:
+                info = ytdl.extract_info(target, download=False)
+            entries = [entry for entry in (info.get("entries") or []) if entry]
+            for candidate in _ordered_candidates(entries):
+                if candidate not in candidates:
+                    candidates.append(candidate)
+        except Exception as exc:
+            logger.warning("YouTube metadata search failed for %r: %s", target, exc)
+    return candidates
 
 
 def _is_direct_youtube_short(value: str) -> bool:
     parsed = urlparse(value)
     return "youtube.com" in parsed.netloc.lower() and "/shorts/" in parsed.path.lower()
+
+
+def _is_verification_error(error_text: str) -> bool:
+    lowered = error_text.lower()
+    return any(token in lowered for token in ("sign in to confirm", "not a bot", "captcha", "po token", "http error 403", "login_required"))
 
 
 def extract_stream_info(url_or_query: str) -> dict:
@@ -127,38 +180,51 @@ def extract_stream_info(url_or_query: str) -> dict:
     if query.startswith("http://") or query.startswith("https://"):
         targets = [query]
     else:
-        # Search several candidates and explicitly discourage Shorts. The
-        # unmodified query remains as a fallback for Burmese titles whose
-        # YouTube search ranking is sensitive to extra English keywords.
-        targets = [
-            f"ytsearch10:{query} -shorts",
-            f"ytsearch10:{query}",
-            f"scsearch5:{query}",
-        ]
+        youtube_candidates = _search_youtube_candidates(query)
+        last_exception: Exception | None = None
+        for candidate in youtube_candidates:
+            for extra_opts in YOUTUBE_FALLBACK_CLIENTS:
+                try:
+                    return _extract_video(candidate, extra_opts)
+                except Exception as exc:
+                    last_exception = exc
+                    logger.warning("YouTube candidate failed %r: %s", candidate, exc)
 
-    last_exception: Exception | None = None
-    client_options = ({}, *YOUTUBE_FALLBACK_CLIENTS)
-
-    for target in targets:
-        if target.startswith("scsearch"):
-            option_sets = ({},)
-        else:
-            option_sets = client_options
-
-        for extra_opts in option_sets:
+        # YouTube search may be blocked while SoundCloud is still available.
+        targets = [f"scsearch5:{query}"]
+        for target in targets:
             try:
-                return _extract_target(target, extra_opts)
+                with YoutubeDL(_yt_opts()) as ytdl:
+                    info = ytdl.extract_info(target, download=False)
+                entries = [entry for entry in (info.get("entries") or []) if entry]
+                for entry in entries:
+                    candidate = entry.get("webpage_url") or entry.get("url")
+                    if candidate:
+                        try:
+                            return _extract_video(candidate)
+                        except Exception as exc:
+                            last_exception = exc
+                            logger.warning("SoundCloud candidate failed %r: %s", candidate, exc)
             except Exception as exc:
                 last_exception = exc
-                logger.warning("Failed stream extraction target=%r options=%r: %s", target, extra_opts, exc)
+                logger.warning("SoundCloud search failed for %r: %s", query, exc)
 
-    error_text = str(last_exception) if last_exception else "unknown extraction error"
-    if any(token in error_text.lower() for token in ("sign in to confirm", "not a bot", "captcha", "po token", "http error 403")):
-        raise RuntimeError(
-            "YouTube က ဒီ server request ကို verification လုပ်ခိုင်းနေပါသည်။ "
-            "ပုံမှန် search ကို fallback ဖြင့် ထပ်စမ်းပြီးဖြစ်သော်လည်း ယခုအချိန်တွင် YouTube ဘက်က request ကန့်သတ်ထားနိုင်ပါသည်။"
-        ) from last_exception
-    raise RuntimeError(f"သီချင်း ရှာမတွေ့ပါခင်ဗျာ။ ({error_text})") from last_exception
+        error_text = str(last_exception) if last_exception else "no playable result"
+        if _is_verification_error(error_text):
+            raise RuntimeError(
+                "YouTube က ဒီ server request ကို verification လုပ်ခိုင်းနေပါသည်။ "
+                "နောက်ထပ် သီချင်းအမည်/artist ဖြင့် ထပ်စမ်းပါ သို့မဟုတ် YouTube link အပြည့်အစုံ ပို့ပါ။"
+            ) from last_exception
+        raise RuntimeError(f"သီချင်း ရှာမတွေ့ပါခင်ဗျာ။ ({error_text})") from last_exception
+
+    last_exception: Exception | None = None
+    for extra_opts in YOUTUBE_FALLBACK_CLIENTS:
+        try:
+            return _extract_video(query, extra_opts)
+        except Exception as exc:
+            last_exception = exc
+            logger.warning("Direct stream extraction failed %r: %s", query, exc)
+    raise RuntimeError("ဒီ link ကို ဖွင့်မရပါ။ ပုံမှန် YouTube video link သို့မဟုတ် သီချင်းအမည်ဖြင့် ထပ်စမ်းပါ။") from last_exception
 
 
 def get_stream_url(url_or_query: str) -> str:
@@ -174,5 +240,4 @@ def start_stream(chat_id: int, url_or_query: str) -> str:
 
 
 def stop_stream(chat_id: int):
-    # FFmpeg is owned by PyTgCalls; leaving the call stops the active stream.
     return None
